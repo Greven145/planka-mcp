@@ -79,7 +79,6 @@ export const CardIncludedSchema = z
   .object({
     taskLists: z.array(TaskListSchema).optional(),
     tasks: z.array(TaskSchema).optional(),
-    comments: z.array(CommentSchema).optional(),
     labels: z.array(LabelSchema).optional(),
     cardLabels: z.array(CardLabelSchema).optional(),
     attachments: z.array(AttachmentSchema).optional(),

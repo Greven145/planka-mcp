@@ -8,6 +8,7 @@ import {
   moveCard,
   deleteCard,
 } from "../operations/cards.js";
+import { getCommentsForCard } from "../operations/comments.js";
 import { createTasks } from "../operations/tasks.js";
 import { addLabelToCard } from "../operations/labels.js";
 import { PlankaError } from "../errors.js";
@@ -146,7 +147,10 @@ export const getCardTool = {
   },
   handler: async (params: { cardId: string }) => {
     try {
-      const details = await getCard(params.cardId);
+      const [details, comments] = await Promise.all([
+        getCard(params.cardId),
+        getCommentsForCard(params.cardId),
+      ]);
 
       const formatted = {
         card: {
@@ -164,7 +168,7 @@ export const getCardTool = {
           name: t.name,
           isCompleted: t.isCompleted,
         })),
-        comments: details.comments.map((c) => ({
+        comments: comments.map((c) => ({
           id: c.id,
           text: c.text,
           createdAt: c.createdAt,

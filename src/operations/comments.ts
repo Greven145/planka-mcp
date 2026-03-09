@@ -9,8 +9,7 @@ import {
   CreateCommentInput,
   UpdateCommentInput,
 } from "../schemas/requests.js";
-import { CommentResponse } from "../schemas/responses.js";
-import { getCard } from "./cards.js";
+import { CommentResponse, CommentsResponse } from "../schemas/responses.js";
 
 /**
  * Add a comment to a card.
@@ -56,9 +55,16 @@ export async function deleteComment(commentId: string): Promise<void> {
 
 /**
  * Get all comments for a card.
- * Comments are included when fetching card details.
+ * Uses the dedicated comments endpoint since Planka 2.0 no longer
+ * includes comments in the card details response.
  */
 export async function getCommentsForCard(cardId: string): Promise<Comment[]> {
-  const cardDetails = await getCard(cardId);
-  return cardDetails.comments;
+  const response = await plankaClient.get<unknown>(
+    `/api/cards/${cardId}/comments`
+  );
+  const parsed = CommentsResponse.parse(response);
+  return parsed.items.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }

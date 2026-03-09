@@ -2,7 +2,7 @@
  * Card operations for PLANKA API.
  */
 import { plankaClient } from "../client.js";
-import { Card, TaskList, Task, Comment, Label, CardLabel, Attachment } from "../schemas/entities.js";
+import { Card, TaskList, Task, Label, CardLabel, Attachment } from "../schemas/entities.js";
 import {
   CreateCardSchema,
   UpdateCardSchema,
@@ -20,7 +20,6 @@ export interface CardDetails {
   card: Card;
   taskLists: TaskList[];
   tasks: Task[];
-  comments: Comment[];
   labels: Label[];
   cardLabels: CardLabel[];
   attachments: Attachment[];
@@ -61,9 +60,6 @@ export async function getCard(cardId: string): Promise<CardDetails> {
     card: parsed.item,
     taskLists: (included.taskLists || []).sort((a, b) => a.position - b.position),
     tasks: (included.tasks || []).sort((a, b) => a.position - b.position),
-    comments: (included.comments || []).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    ),
     labels: included.labels || [],
     cardLabels: included.cardLabels || [],
     attachments: included.attachments || [],
