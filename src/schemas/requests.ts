@@ -105,6 +105,7 @@ export const CreateListSchema = z.object({
   boardId: z.string(),
   name: z.string().min(1, "List name required"),
   position: z.number().optional().default(65536),
+  type: z.enum(["active", "closed"]).optional().default("active"), // Required for PLANKA 2.0
 });
 export type CreateListInput = z.input<typeof CreateListSchema>;
 
