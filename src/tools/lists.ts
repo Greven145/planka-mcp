@@ -7,6 +7,7 @@ import {
   deleteList,
 } from "../operations/lists.js";
 import { PlankaError } from "../errors.js";
+import { toText, stripNulls } from "../format.js";
 
 /**
  * Tool: planka_manage_lists
@@ -85,7 +86,7 @@ export const manageListsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     list: {
@@ -93,10 +94,7 @@ export const manageListsTool = {
                       name: list.name,
                       position: list.position,
                     },
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };
@@ -125,7 +123,7 @@ export const manageListsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     list: {
@@ -133,10 +131,7 @@ export const manageListsTool = {
                       name: list.name,
                       position: list.position,
                     },
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };
@@ -161,14 +156,11 @@ export const manageListsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     message: `List ${params.listId} deleted`,
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };

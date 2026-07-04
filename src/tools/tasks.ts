@@ -3,6 +3,7 @@
  */
 import { createTasks, updateTask, deleteTask } from "../operations/tasks.js";
 import { PlankaError } from "../errors.js";
+import { toText, stripNulls } from "../format.js";
 
 /**
  * Tool: planka_create_tasks
@@ -38,7 +39,7 @@ export const createTasksTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 tasksCreated: tasks.length,
@@ -47,10 +48,7 @@ export const createTasksTool = {
                   name: t.name,
                   isCompleted: t.isCompleted,
                 })),
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
@@ -111,7 +109,7 @@ export const updateTaskTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 task: {
@@ -119,10 +117,7 @@ export const updateTaskTool = {
                   name: task.name,
                   isCompleted: task.isCompleted,
                 },
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
@@ -163,14 +158,11 @@ export const deleteTaskTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 message: `Task ${params.taskId} deleted`,
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };

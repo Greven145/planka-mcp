@@ -3,6 +3,10 @@
  */
 import { getStructure } from "../operations/projects.js";
 import { getBoardWithTaskCounts } from "../operations/boards.js";
+import { parseDetail, toRows, capArray, truncate } from "../format.js";
+
+/** Max cards rendered per list before a "… and N more" sentinel. */
+const CARDS_PER_LIST_CAP = 50;
 
 /**
  * Tool: planka_get_structure
@@ -24,29 +28,27 @@ export const getStructureTool = {
   handler: async (params: { projectId?: string }) => {
     const structure = await getStructure(params.projectId);
 
-    // Format for readability
-    const formatted = structure.map((project) => ({
-      project: {
-        id: project.project.id,
-        name: project.project.name,
-      },
-      boards: project.boards.map((b) => ({
-        id: b.board.id,
-        name: b.board.name,
-        lists: b.lists
+    // Compact hierarchical text: "id" tags are kept because callers need them
+    // to act on boards/lists; everything else is already just names.
+    const lines: string[] = [];
+    for (const project of structure) {
+      lines.push(`project ${project.project.name} [${project.project.id}]`);
+      for (const b of project.boards) {
+        lines.push(`  board ${b.board.name} [${b.board.id}]`);
+        const lists = b.lists
           .filter((l) => l.name !== null) // Filter out archive/trash
-          .map((l) => ({
-            id: l.id,
-            name: l.name,
-          })),
-      })),
-    }));
+          .map((l) => `${l.name} [${l.id}]`);
+        if (lists.length > 0) {
+          lines.push(`    lists: ${lists.join(", ")}`);
+        }
+      }
+    }
 
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(formatted, null, 2),
+          text: lines.join("\n"),
         },
       ],
     };
@@ -73,13 +75,26 @@ export const getBoardTool = {
         description: "Include task completion counts for each card",
         default: true,
       },
+      detail: {
+        type: "string",
+        enum: ["compact", "full"],
+        description:
+          "Output verbosity. 'compact' (default) omits descriptions; 'full' adds each card's description.",
+        default: "compact",
+      },
     },
     required: ["boardId"],
   },
-  handler: async (params: { boardId: string; includeTaskCounts?: boolean }) => {
+  handler: async (params: {
+    boardId: string;
+    includeTaskCounts?: boolean;
+    detail?: string;
+  }) => {
+    const detail = parseDetail(params.detail);
+    const showTaskCounts = params.includeTaskCounts !== false;
     const details = await getBoardWithTaskCounts(params.boardId);
 
-    // Group cards by list for readability
+    // Group cards by list
     const cardsByList = new Map<string, typeof details.cards>();
     for (const card of details.cards) {
       const listCards = cardsByList.get(card.listId) || [];
@@ -87,80 +102,68 @@ export const getBoardTool = {
       cardsByList.set(card.listId, listCards);
     }
 
-    // Build label lookup
+    // Build card -> label names lookup
     const labelById = new Map(details.labels.map((l) => [l.id, l]));
-
-    // Build card-label lookup
     const labelsByCard = new Map<string, string[]>();
     for (const cl of details.cardLabels) {
-      const labels = labelsByCard.get(cl.cardId) || [];
+      const names = labelsByCard.get(cl.cardId) || [];
       const label = labelById.get(cl.labelId);
-      if (label) {
-        labels.push(label.name || label.color);
-      }
-      labelsByCard.set(cl.cardId, labels);
+      if (label) names.push(label.name || label.color);
+      labelsByCard.set(cl.cardId, names);
     }
 
-    const formatted = {
-      board: {
-        id: details.board.id,
-        name: details.board.name,
-      },
-      labels: details.labels.map((l) => ({
-        id: l.id,
-        name: l.name,
-        color: l.color,
-      })),
-      lists: details.lists
-        .filter((l) => l.name !== null) // Filter archive/trash
-        .map((list) => {
-          const listCards = (cardsByList.get(list.id) || []).sort(
-            (a, b) => a.position - b.position
-          );
-          return {
-            id: list.id,
-            name: list.name,
-            cards: listCards.map((card) => {
-              const cardData: Record<string, unknown> = {
-                id: card.id,
-                name: card.name,
-              };
+    const columns =
+      detail === "full"
+        ? ["id", "name", "labels", "tasks", "due", "done", "desc"]
+        : ["id", "name", "labels", "tasks", "due", "done"];
 
-              if (card.description) {
-                cardData.description =
-                  card.description.length > 100
-                    ? card.description.substring(0, 100) + "..."
-                    : card.description;
-              }
+    const blocks: string[] = [
+      `board: ${details.board.name} [${details.board.id}]`,
+    ];
 
-              if (card.dueDate) {
-                cardData.dueDate = card.dueDate;
-              }
+    const labelRows = toRows(
+      "labels",
+      ["id", "name", "color"],
+      details.labels,
+      (l) => [l.id, l.name, l.color]
+    );
+    if (labelRows) blocks.push(labelRows);
 
-              if (card.isCompleted) {
-                cardData.isCompleted = card.isCompleted;
-              }
+    for (const list of details.lists) {
+      if (list.name === null) continue; // Filter archive/trash
+      const all = (cardsByList.get(list.id) || []).sort(
+        (a, b) => a.position - b.position
+      );
+      const { items, more } = capArray(all, CARDS_PER_LIST_CAP);
+      blocks.push(`list: ${list.name} [${list.id}] (${all.length})`);
 
-              const cardLabels = labelsByCard.get(card.id);
-              if (cardLabels && cardLabels.length > 0) {
-                cardData.labels = cardLabels;
-              }
-
-              if (params.includeTaskCounts !== false && card.taskCount > 0) {
-                cardData.tasks = `${card.completedTaskCount}/${card.taskCount}`;
-              }
-
-              return cardData;
-            }),
-          };
-        }),
-    };
+      const rows = toRows("card", columns, items, (card) => {
+        const cells: unknown[] = [
+          card.id,
+          card.name,
+          labelsByCard.get(card.id) || [],
+          showTaskCounts && card.taskCount > 0
+            ? `${card.completedTaskCount}/${card.taskCount}`
+            : "",
+          card.dueDate || "",
+          card.isCompleted ? "✓" : "",
+        ];
+        if (detail === "full") {
+          cells.push(card.description ? truncate(card.description, 500) : "");
+        }
+        return cells;
+      });
+      if (rows) blocks.push(rows);
+      if (more > 0) {
+        blocks.push(`… and ${more} more card(s) in this list`);
+      }
+    }
 
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(formatted, null, 2),
+          text: blocks.join("\n"),
         },
       ],
     };

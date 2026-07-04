@@ -9,6 +9,7 @@ import {
 } from "../operations/labels.js";
 import { LabelColorSchema } from "../schemas/entities.js";
 import { PlankaError } from "../errors.js";
+import { toText, stripNulls } from "../format.js";
 
 // Valid colors for the schema description
 const validColors = LabelColorSchema.options.join(", ");
@@ -42,7 +43,8 @@ export const manageLabelsTool = {
       },
       color: {
         type: "string",
-        description: `Label color. Valid colors: ${validColors}`,
+        description:
+          "Label color (Planka palette slug, e.g. berry-red, lagoon-blue, egg-yellow). On an invalid value the error lists all valid colors.",
       },
     },
     required: ["action"],
@@ -115,7 +117,7 @@ export const manageLabelsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     label: {
@@ -123,10 +125,7 @@ export const manageLabelsTool = {
                       name: label.name,
                       color: label.color,
                     },
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };
@@ -169,7 +168,7 @@ export const manageLabelsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     label: {
@@ -177,10 +176,7 @@ export const manageLabelsTool = {
                       name: label.name,
                       color: label.color,
                     },
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };
@@ -205,14 +201,11 @@ export const manageLabelsTool = {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(
+                text: toText(stripNulls(
                   {
                     success: true,
                     message: `Label ${params.labelId} deleted`,
-                  },
-                  null,
-                  2
-                ),
+                  })),
               },
             ],
           };
@@ -284,16 +277,13 @@ export const setCardLabelsTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 cardId: params.cardId,
                 labelsAdded: params.addLabelIds?.length || 0,
                 labelsRemoved: params.removeLabelIds?.length || 0,
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };

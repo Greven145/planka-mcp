@@ -12,6 +12,10 @@ import { getCommentsForCard } from "../operations/comments.js";
 import { createTasks } from "../operations/tasks.js";
 import { addLabelToCard } from "../operations/labels.js";
 import { PlankaError } from "../errors.js";
+import { parseDetail, toText, stripNulls, toRows, capArray } from "../format.js";
+
+/** Max comments rendered before a "… and N more" sentinel. */
+const COMMENTS_CAP = 30;
 
 /**
  * Tool: planka_create_card
@@ -97,7 +101,7 @@ export const createCardTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 card: {
@@ -108,10 +112,7 @@ export const createCardTool = {
                 tasksCreated: params.tasks?.length || 0,
                 labelsAttached,
                 ...(labelErrors.length > 0 && { labelErrors }),
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
@@ -142,56 +143,78 @@ export const getCardTool = {
         type: "string",
         description: "The card ID",
       },
+      detail: {
+        type: "string",
+        enum: ["compact", "full"],
+        description:
+          "Output verbosity. 'compact' (default) omits timestamps; 'full' adds createdAt/boardId and comment timestamps.",
+        default: "compact",
+      },
     },
     required: ["cardId"],
   },
-  handler: async (params: { cardId: string }) => {
+  handler: async (params: { cardId: string; detail?: string }) => {
     try {
+      const detail = parseDetail(params.detail);
       const [details, comments] = await Promise.all([
         getCard(params.cardId),
         getCommentsForCard(params.cardId),
       ]);
 
-      const formatted = {
-        card: {
-          id: details.card.id,
-          name: details.card.name,
-          description: details.card.description,
-          listId: details.card.listId,
-          boardId: details.card.boardId,
-          dueDate: details.card.dueDate,
-          isCompleted: details.card.isCompleted,
-          createdAt: details.card.createdAt,
-        },
-        tasks: details.tasks.map((t) => ({
-          id: t.id,
-          name: t.name,
-          isCompleted: t.isCompleted,
-        })),
-        comments: comments.map((c) => ({
-          id: c.id,
-          text: c.text,
-          createdAt: c.createdAt,
-        })),
-        labels: details.cardLabels.map((cl) => {
-          const label = details.labels.find((l) => l.id === cl.labelId);
-          return {
-            id: cl.labelId,
-            name: label?.name,
-            color: label?.color,
-          };
-        }),
-        attachments: details.attachments.map((a) => ({
-          id: a.id,
-          name: a.name,
-        })),
-      };
+      // Card header — empty/null fields are dropped by stripNulls. Timestamps
+      // and boardId only ship in 'full'.
+      const card = stripNulls({
+        id: details.card.id,
+        name: details.card.name,
+        description: details.card.description,
+        listId: details.card.listId,
+        dueDate: details.card.dueDate,
+        isCompleted: details.card.isCompleted,
+        boardId: detail === "full" ? details.card.boardId : undefined,
+        createdAt: detail === "full" ? details.card.createdAt : undefined,
+      });
+
+      const labelDescriptors = details.cardLabels.map((cl) => {
+        const label = details.labels.find((l) => l.id === cl.labelId);
+        return label?.name || label?.color || cl.labelId;
+      });
+
+      const blocks: string[] = [`card: ${toText(card)}`];
+
+      if (labelDescriptors.length > 0) {
+        blocks.push(`labels: ${labelDescriptors.join(", ")}`);
+      }
+
+      const taskRows = toRows(
+        "task",
+        ["id", "name", "done"],
+        details.tasks,
+        (t) => [t.id, t.name, t.isCompleted ? "✓" : ""]
+      );
+      if (taskRows) blocks.push(taskRows);
+
+      const { items: shownComments, more } = capArray(comments, COMMENTS_CAP);
+      const commentCols =
+        detail === "full" ? ["id", "text", "created"] : ["id", "text"];
+      const commentRows = toRows("comment", commentCols, shownComments, (c) =>
+        detail === "full" ? [c.id, c.text, c.createdAt] : [c.id, c.text]
+      );
+      if (commentRows) blocks.push(commentRows);
+      if (more > 0) blocks.push(`… and ${more} more comment(s)`);
+
+      const attachmentRows = toRows(
+        "attachment",
+        ["id", "name"],
+        details.attachments,
+        (a) => [a.id, a.name]
+      );
+      if (attachmentRows) blocks.push(attachmentRows);
 
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(formatted, null, 2),
+            text: blocks.join("\n"),
           },
         ],
       };
@@ -267,7 +290,7 @@ export const updateCardTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 card: {
@@ -277,10 +300,7 @@ export const updateCardTool = {
                   dueDate: card.dueDate,
                   isCompleted: card.isCompleted,
                 },
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
@@ -339,7 +359,7 @@ export const moveCardTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 card: {
@@ -347,10 +367,7 @@ export const moveCardTool = {
                   name: card.name,
                   listId: card.listId,
                 },
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
@@ -391,14 +408,11 @@ export const deleteCardTool = {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(
+            text: toText(stripNulls(
               {
                 success: true,
                 message: `Card ${params.cardId} deleted`,
-              },
-              null,
-              2
-            ),
+              })),
           },
         ],
       };
